@@ -1,4 +1,55 @@
-# Cozytouch — Sauter Pagosa fork
+# Cozytouch — fork Sauter Pagosa
+
+**En bref :** ce fork de [gduteil/cozytouch](https://github.com/gduteil/cozytouch) (version 1.4)
+fait apparaître dans Home Assistant le **chauffe-eau thermodynamique Sauter / Atlantic Pagosa**,
+que l'intégration d'origine ne voit pas du tout.
+
+## Pourquoi ce fork
+
+Avec l'intégration d'origine, un compte Cozytouch qui ne contient qu'un Pagosa
+n'affiche **aucun appareil** : le Pagosa n'est pas décrit dans la partie Cozytouch
+que l'intégration lit. Il est géré par une autre plateforme d'Atlantic, **Overkiz**,
+accessible avec le même identifiant et le même mot de passe. Ce fork va le chercher
+là quand Cozytouch ne renvoie rien. Les autres appareils (chaudières, pompes à chaleur,
+clim) fonctionnent exactement comme avant.
+
+Testé sur un Sauter Pagosa 270 L.
+
+## Ce que vous obtenez dans Home Assistant
+
+Toutes les fonctions de l'application Atlantic, y compris celles qui ne
+fonctionnaient pas au départ :
+
+- **Mode de fonctionnement** automatique ou manuel ;
+- **Température de consigne** en mode manuel (limites lues sur l'appareil) ;
+- **Mode Eco** (en mode manuel, comme dans l'application) ;
+- **Boost** de 1 à 7 jours ;
+- **Absence** de 48 h minimum, avec durée réglable et un **calendrier** pour la planifier ;
+- **Programmation hebdomadaire** (plages de chauffe) ;
+- **Date et heure** de l'appareil ;
+- **Capteurs** : températures de l'eau, quantité d'eau chaude disponible, temps de
+  fonctionnement de la pompe à chaleur et de l'appoint électrique, **consommation
+  d'énergie** (utilisable dans le tableau Énergie), réglages, qualité radio, erreurs ;
+- **Boutons** pour forcer une actualisation ou identifier l'appareil.
+
+Côté fiabilité : le Pagosa met plusieurs minutes à confirmer un changement, donc
+l'état demandé reste affiché le temps qu'il suive. Les limites d'appels d'Overkiz
+sont respectées et la session est renouvelée proprement si elle expire.
+
+## Installation
+
+Avec HACS : *Dépôts personnalisés* → ajouter `https://github.com/Daelle84/Pagosa`
+(catégorie *Intégration*), installer, puis **redémarrer complètement** Home Assistant.
+Ajoutez ensuite l'intégration *Cozytouch* avec vos identifiants de l'application Atlantic.
+
+Manuellement : copier `custom_components/cozytouch` dans `config/custom_components/cozytouch`,
+puis redémarrer.
+
+---
+
+*English below.*
+
+# Cozytouch — Sauter Pagosa fork (English)
 
 This branch is a fork of [gduteil/cozytouch](https://github.com/gduteil/cozytouch) **1.4**
 that adds the **Sauter / Atlantic Pagosa** thermodynamic water heater.
@@ -43,7 +94,7 @@ Entity names are in French for now.
 ## Install this fork
 
 HACS: add `https://github.com/Daelle84/Pagosa` as a custom repository
-(category *Integration*) and pick the `pagosa-1.4` branch. Manually: copy
+(category *Integration*); `pagosa-1.4` is the default branch. Manually: copy
 `custom_components/cozytouch` to `config/custom_components/cozytouch`.
 A full Home Assistant restart is needed after any update.
 
