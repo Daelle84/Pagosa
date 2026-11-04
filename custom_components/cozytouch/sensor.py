@@ -1,4 +1,5 @@
-"""Sensors for Atlantic Cozytouch integration."""
+
+"""Sensors for Atlantic Cozytouch and Sauter Pagosa integration."""
 
 from __future__ import annotations
 
@@ -34,31 +35,348 @@ from .hub import Hub
 _LOGGER = logging.getLogger(__name__)
 
 
-# config flow setup
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Modern (thru config entry) sensors setup."""
-    _LOGGER.debug("%s: setting up sensor plateform", config_entry.title)
-    # Retrieve the serial reader object
-    # Retrieve the hub object
+    """Set up Cozytouch sensors."""
+    _LOGGER.debug("%s: setting up sensor platform", config_entry.title)
+
     try:
         hub = hass.data[DOMAIN][config_entry.entry_id]
     except KeyError:
         _LOGGER.error(
-            "%s: can not init sensors: failed to get the hub object",
+            "%s: cannot initialise sensors: hub not found",
             config_entry.title,
         )
         return
 
-    # Init sensors
     sensors = []
-    capabilities = hub.get_capabilities_for_device(config_entry.data["deviceId"])
+
+    # Sauter Pagosa connected through Overkiz.
+    if hub.is_overkiz():
+        states = hub.get_overkiz_states()
+
+        if not isinstance(states, dict):
+            states = {}
+
+        pagosa_sensors = [
+            {
+                "state": "core:TemperatureState",
+                "name": "Température de l'eau",
+                "icon": "mdi:thermometer",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "core:TargetTemperatureState",
+                "name": "Température cible",
+                "icon": "mdi:thermometer-check",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "core:ComfortTargetTemperatureState",
+                "name": "Température de confort",
+                "icon": "mdi:thermometer-plus",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "core:EcoTargetTemperatureState",
+                "name": "Température éco",
+                "icon": "mdi:thermometer-minus",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "core:FrostProtectionTargetTemperatureState",
+                "name": "Température hors gel",
+                "icon": "mdi:snowflake-thermometer",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "core:HaltedTargetTemperatureState",
+                "name": "Température en arrêt",
+                "icon": "mdi:thermometer-off",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+                "state_class": SensorStateClass.MEASUREMENT,
+            },
+            {
+                "state": "io:DHWCapacityState",
+                "name": "Capacité du ballon",
+                "icon": "mdi:water",
+                "device_class": SensorDeviceClass.VOLUME,
+                "unit": UnitOfVolume.LITERS,
+            },
+            {
+                "state": "core:WaterConsumptionState",
+                "name": "Consommation d'eau",
+                "icon": "mdi:water-outline",
+            },
+            {
+                "state": "io:HeatPumpOperatingTimeState",
+                "name": "Temps de fonctionnement pompe à chaleur",
+                "icon": "mdi:clock-outline",
+            },
+            {
+                "state": "io:ElectricBoosterOperatingTimeState",
+                "name": "Temps de fonctionnement appoint électrique",
+                "icon": "mdi:clock-time-four-outline",
+            },
+            {
+                "state": "core:RSSILevelState",
+                "name": "Puissance du signal radio",
+                "icon": "mdi:wifi",
+            },
+            {
+                "state": "core:DiscreteRSSILevelState",
+                "name": "Qualité du signal radio",
+                "icon": "mdi:wifi-strength-2",
+            },
+            {
+                "state": "core:StatusState",
+                "name": "État de connexion du chauffe-eau",
+                "icon": "mdi:connection",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:ManufacturerNameState",
+                "name": "Fabricant",
+                "icon": "mdi:factory",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:NameState",
+                "name": "Nom de l'appareil",
+                "icon": "mdi:tag",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:VersionState",
+                "name": "Version matérielle",
+                "icon": "mdi:chip",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:OperatingModeState",
+                "name": "État des modes de fonctionnement",
+                "icon": "mdi:state-machine",
+            },
+            {
+                "state": "core:CommandLockLevelsState",
+                "name": "Verrouillages des commandes",
+                "icon": "mdi:lock",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:PriorityLockTimerState",
+                "name": "Durée du verrouillage prioritaire",
+                "icon": "mdi:timer-lock",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "core:SecuredPositionTemperatureState",
+                "name": "Température de sécurité",
+                "icon": "mdi:shield-thermometer",
+                "device_class": SensorDeviceClass.TEMPERATURE,
+                "unit": UnitOfTemperature.CELSIUS,
+            },
+            {
+                "state": "io:DHWModeState",
+                "name": "Mode de fonctionnement ECS",
+                "icon": "mdi:water-boiler",
+            },
+            {
+                "state": "io:OperatingRangeState",
+                "name": "Plage de fonctionnement",
+                "icon": "mdi:tune",
+            },
+            {
+                "state": "io:AntiLegionellosisState",
+                "name": "Protection anti-légionellose",
+                "icon": "mdi:shield-check",
+            },
+            {
+                "state": "io:ElectricalExtraManagementState",
+                "name": "Gestion appoint électrique",
+                "icon": "mdi:flash",
+            },
+            {
+                "state": "io:InstallationState",
+                "name": "Type d'installation",
+                "icon": "mdi:home-lightning-bolt",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "io:BoilerInstallationOptionState",
+                "name": "Option d'installation",
+                "icon": "mdi:cog",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "io:SmartGridOptionState",
+                "name": "Option Smart Grid",
+                "icon": "mdi:transmission-tower",
+            },
+            {
+                "state": "io:ExtractionOptionState",
+                "name": "Option d'extraction",
+                "icon": "mdi:fan",
+            },
+            {
+                "state": "io:RateManagementState",
+                "name": "Gestion tarifaire",
+                "icon": "mdi:currency-eur",
+            },
+            {
+                "state": "io:AwayModeDurationState",
+                "name": "Durée du mode absence",
+                "icon": "mdi:calendar-clock",
+            },
+            {
+                "state": "core:BoostModeDurationState",
+                "name": "Durée du mode Boost",
+                "icon": "mdi:rocket-launch",
+            },
+            {
+                "state": "io:OperatingModeCapabilitiesState",
+                "name": "Fonctions disponibles",
+                "icon": "mdi:list-box",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "io:DHWErrorState",
+                "name": "Erreur chauffe-eau",
+                "icon": "mdi:alert-circle-outline",
+                "entity_category": EntityCategory.DIAGNOSTIC,
+            },
+            {
+                "state": "io:ProgrammingSlotsState",
+                "name": "Programmation horaire",
+                "icon": "mdi:calendar-clock",
+            },
+            {
+                "state": "io:ElectricalExtraManagementState",
+                "name": "Gestion appoint électrique",
+                "icon": "mdi:lightning-bolt",
+            },
+            {
+                "state": "io:SmartGridOptionState",
+                "name": "Configuration Smart Grid",
+                "icon": "mdi:transmission-tower",
+            },
+            {
+                "state": "io:BoilerInstallationOptionState",
+                "name": "Configuration chaudière",
+                "icon": "mdi:water-boiler-auto",
+            },
+            {
+                "state": "io:ExtractionOptionState",
+                "name": "Configuration extraction",
+                "icon": "mdi:fan",
+            },
+        ]
+
+        seen_states = set()
+
+        for description in pagosa_sensors:
+            state_key = description["state"]
+
+            if state_key in seen_states or state_key not in states:
+                continue
+
+            seen_states.add(state_key)
+
+            sensors.append(
+                OverkizPagosaSensor(
+                    coordinator=hub,
+                    config_entry=config_entry,
+                    state_key=state_key,
+                    description=description,
+                )
+            )
+
+        # Energy meter is a separate Overkiz device (#2).
+        energy_states = hub.get_overkiz_energy_states()
+
+        if not isinstance(energy_states, dict):
+            energy_states = {}
+
+        energy_sensors = [
+            {
+                "state": "core:ElectricEnergyConsumptionState",
+                "name": "Consommation électrique totale",
+                "icon": "mdi:lightning-bolt",
+            },
+            {
+                "state": "core:ElectricEnergyConsumptionInTariff1State",
+                "name": "Consommation électrique tarif 1",
+                "icon": "mdi:lightning-bolt-outline",
+            },
+            {
+                "state": "core:ElectricEnergyConsumptionInTariff2State",
+                "name": "Consommation électrique tarif 2",
+                "icon": "mdi:lightning-bolt-outline",
+            },
+        ]
+
+        for description in energy_sensors:
+            state_key = description["state"]
+
+            if state_key not in energy_states:
+                continue
+
+            sensors.append(
+                OverkizPagosaEnergySensor(
+                    coordinator=hub,
+                    config_entry=config_entry,
+                    state_key=state_key,
+                    description=description,
+                )
+            )
+
+        if sensors:
+            _LOGGER.info(
+                "%s: adding %d Pagosa Overkiz sensors",
+                config_entry.title,
+                len(sensors),
+            )
+
+            _LOGGER.info(
+                "%s: found %d Pagosa energy states",
+                config_entry.title,
+                sum(
+                    1
+                    for item in energy_sensors
+                    if item["state"] in energy_states
+                ),
+            )
+
+            async_add_entities(sensors, True)
+        else:
+            _LOGGER.warning(
+                "%s: no Pagosa states available to create sensors",
+                config_entry.title,
+            )
+
+        return
+
+    # Classic Atlantic Cozytouch devices.
+    capabilities = hub.get_capabilities_for_device(
+        config_entry.data["deviceId"]
+    )
+
     for capability in capabilities:
         if capability["type"] in ("string", "int"):
-            # Use a CozytouchSensor for integers
             sensors.append(
                 CozytouchSensor(
                     capability=capability,
@@ -67,6 +385,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "temperature":
             sensors.append(
                 CozytouchUnitSensor(
@@ -78,6 +397,7 @@ async def async_setup_entry(
                     native_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 )
             )
+
         elif capability["type"] == "pressure":
             sensors.append(
                 CozytouchUnitSensor(
@@ -89,34 +409,23 @@ async def async_setup_entry(
                     native_unit_of_measurement=UnitOfPressure.BAR,
                 )
             )
-        elif capability["type"] == "away_mode_timestamps":
-            sensors.append(
-                CozytouchAwayModeTimestampSensor(
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                    attr_uniq_id=config_entry.entry_id + "_0",
-                    coordinator=hub,
-                    name=capability["name_0"],
-                    icon=capability.get("icon_0", None),
-                    separator=",",
-                    timestamp_index=0,
-                )
-            )
 
-            sensors.append(
-                CozytouchAwayModeTimestampSensor(
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                    attr_uniq_id=config_entry.entry_id + "_1",
-                    coordinator=hub,
-                    name=capability["name_1"],
-                    icon=capability.get("icon_1", None),
-                    separator=",",
-                    timestamp_index=1,
+        elif capability["type"] == "away_mode_timestamps":
+            for index in (0, 1):
+                sensors.append(
+                    CozytouchAwayModeTimestampSensor(
+                        capability=capability,
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                        attr_uniq_id=f"{config_entry.entry_id}_{index}",
+                        coordinator=hub,
+                        name=capability[f"name_{index}"],
+                        icon=capability.get(f"icon_{index}"),
+                        separator=",",
+                        timestamp_index=index,
+                    )
                 )
-            )
+
         elif capability["type"] in ("switch", "binary"):
             sensors.append(
                 CozytouchBinarySensor(
@@ -126,6 +435,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "away_mode_switch":
             sensors.append(
                 CozytouchAwayModeSensor(
@@ -135,6 +445,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "signal":
             sensors.append(
                 CozytouchUnitSensor(
@@ -146,15 +457,8 @@ async def async_setup_entry(
                     native_unit_of_measurement=UnitOfSoundPressure.DECIBEL,
                 )
             )
+
         elif capability["type"] == "power":
-            native_unit_of_measurement = capability.get(
-                "displayed_unit_of_measurement", UnitOfPower.WATT
-            )
-
-            display_factor = 1.0
-            if native_unit_of_measurement == UnitOfPower.KILO_WATT:
-                display_factor = 0.001
-
             sensors.append(
                 CozytouchUnitSensor(
                     capability=capability,
@@ -163,21 +467,25 @@ async def async_setup_entry(
                     coordinator=hub,
                     device_class=SensorDeviceClass.POWER,
                     native_unit_of_measurement=capability.get(
-                        "displayed_unit_of_measurement", UnitOfPower.WATT
+                        "displayed_unit_of_measurement",
+                        UnitOfPower.WATT,
                     ),
                     displayed_unit_of_measurement=capability.get(
-                        "displayed_unit_of_measurement", None
+                        "displayed_unit_of_measurement"
                     ),
                 )
             )
-        elif capability["type"] == "energy":
-            native_unit_of_measurement = capability.get(
-                "displayed_unit_of_measurement", UnitOfEnergy.WATT_HOUR
-            )
 
-            display_factor = 1.0
-            if native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR:
-                display_factor = 0.001
+        elif capability["type"] == "energy":
+            native_unit = capability.get(
+                "displayed_unit_of_measurement",
+                UnitOfEnergy.WATT_HOUR,
+            )
+            display_factor = (
+                0.001
+                if native_unit == UnitOfEnergy.KILO_WATT_HOUR
+                else 1.0
+            )
 
             sensors.append(
                 CozytouchUnitSensor(
@@ -187,10 +495,11 @@ async def async_setup_entry(
                     coordinator=hub,
                     device_class=SensorDeviceClass.ENERGY,
                     state_class=SensorStateClass.TOTAL_INCREASING,
-                    native_unit_of_measurement=native_unit_of_measurement,
+                    native_unit_of_measurement=native_unit,
                     display_factor=display_factor,
                 )
             )
+
         elif capability["type"] == "volume":
             sensors.append(
                 CozytouchUnitSensor(
@@ -202,6 +511,7 @@ async def async_setup_entry(
                     native_unit_of_measurement=UnitOfVolume.LITERS,
                 )
             )
+
         elif capability["type"] == "water_consumption":
             sensors.append(
                 CozytouchUnitSensor(
@@ -214,6 +524,7 @@ async def async_setup_entry(
                     state_class=SensorStateClass.TOTAL_INCREASING,
                 )
             )
+
         elif capability["type"] == "percentage":
             sensors.append(
                 CozytouchUnitSensor(
@@ -225,6 +536,7 @@ async def async_setup_entry(
                     native_unit_of_measurement=PERCENTAGE,
                 )
             )
+
         elif capability["type"] == "time":
             sensors.append(
                 CozytouchTimeSensor(
@@ -244,6 +556,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "prog":
             sensors.append(
                 CozytouchProgSensor(
@@ -253,6 +566,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "progtime":
             sensors.append(
                 CozytouchProgTimeSensor(
@@ -262,6 +576,7 @@ async def async_setup_entry(
                     coordinator=hub,
                 )
             )
+
         elif capability["type"] == "climate":
             sensors.append(
                 CozytouchSensor(
@@ -272,13 +587,177 @@ async def async_setup_entry(
                 )
             )
 
-    # Add the entities to HA
-    if len(sensors) > 0:
+    if sensors:
         async_add_entities(sensors, True)
 
 
+class OverkizPagosaSensor(CoordinatorEntity[Hub], SensorEntity):
+    """Sensor based on an Overkiz state of a Sauter Pagosa."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_entry: ConfigEntry,
+        state_key: str,
+        description: dict,
+    ) -> None:
+        """Initialize a Pagosa sensor."""
+        super().__init__(coordinator)
+
+        self._state_key = state_key
+        self._config_entry = config_entry
+
+        self._attr_name = description["name"]
+        self._attr_icon = description.get("icon")
+        self._attr_unique_id = (
+            f"{DOMAIN}_{config_entry.entry_id}_overkiz_"
+            f"{state_key.replace(':', '_')}"
+        )
+
+        self._attr_native_unit_of_measurement = description.get("unit")
+        self._attr_device_class = description.get("device_class")
+        self._attr_state_class = description.get("state_class")
+        self._attr_entity_category = description.get("entity_category")
+
+        device = coordinator.get_overkiz_device() or {}
+        self._device_identifier = str(
+            device.get("deviceURL", config_entry.entry_id)
+        )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return Pagosa device information."""
+        device = self.coordinator.get_overkiz_device() or {}
+
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._device_identifier)},
+            manufacturer="Sauter",
+            name=device.get("label") or self._config_entry.title,
+            model="Pagosa 270L",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return sensor availability."""
+        return (
+            self.coordinator.last_update_success
+            and self._state_key in self.coordinator.get_overkiz_states()
+        )
+
+    @property
+    def native_value(self):
+        """Return the current state value."""
+        value = self.coordinator.get_overkiz_state(self._state_key)
+
+        if value is None:
+            return None
+
+        if isinstance(value, (dict, list)):
+            return json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+
+        if isinstance(value, (int, float, bool)):
+            return value
+
+        return str(value)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update the sensor when the coordinator refreshes."""
+        self.async_write_ha_state()
+
+
+class OverkizPagosaEnergySensor(CoordinatorEntity[Hub], SensorEntity):
+    """Energy sensor from the separate Pagosa Overkiz energy device."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_entry: ConfigEntry,
+        state_key: str,
+        description: dict,
+    ) -> None:
+        """Initialize energy sensor."""
+        super().__init__(coordinator)
+
+        self._state_key = state_key
+        self._config_entry = config_entry
+        self._attr_name = description["name"]
+        self._attr_icon = description.get("icon")
+
+        self._attr_unique_id = (
+            f"{DOMAIN}_{config_entry.entry_id}_overkiz_energy_"
+            f"{state_key.replace(':', '_')}"
+        )
+
+        # Keep the energy entities grouped with the main Pagosa device.
+        device = coordinator.get_overkiz_device() or {}
+        self._device_identifier = str(
+            device.get("deviceURL", config_entry.entry_id)
+        )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the same physical appliance as the Pagosa sensors."""
+        device = self.coordinator.get_overkiz_device() or {}
+
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._device_identifier)},
+            manufacturer="Sauter",
+            name=device.get("label") or self._config_entry.title,
+            model="Pagosa 270L",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return energy sensor availability."""
+        return (
+            self.coordinator.last_update_success
+            and self._state_key
+            in self.coordinator.get_overkiz_energy_states()
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Convert the Overkiz Wh value to kWh."""
+        value = self.coordinator.get_overkiz_energy_state(
+            self._state_key
+        )
+
+        if value is None:
+            return None
+
+        try:
+            return float(value) / 1000
+        except (TypeError, ValueError):
+            _LOGGER.warning(
+                "Invalid energy value for %s: %s",
+                self._state_key,
+                value,
+            )
+            return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update energy sensor."""
+        self.async_write_ha_state()
+
+
 class CozytouchSensor(SensorEntity, CoordinatorEntity):
-    """Common class for sensors."""
+    """Common class for Cozytouch sensors."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -301,7 +780,7 @@ class CozytouchSensor(SensorEntity, CoordinatorEntity):
         self._capability = capability
         self._config_title = config_title
         self._config_uniq_id = config_uniq_id
-        self._last_value: str | None = None
+        self._last_value = None
         self._device_uniq_id = config_uniq_id
 
         if value_type:
@@ -314,8 +793,10 @@ class CozytouchSensor(SensorEntity, CoordinatorEntity):
         if attr_uniq_id:
             self._attr_unique_id = attr_uniq_id
         else:
-            capabilityId = self._capability["capabilityId"]
-            self._attr_unique_id = f"{DOMAIN}_{config_uniq_id}_{str(capabilityId)}"
+            capability_id = self._capability["capabilityId"]
+            self._attr_unique_id = (
+                f"{DOMAIN}_{config_uniq_id}_{str(capability_id)}"
+            )
 
         self.entity_description = SensorEntityDescription(
             key="capability_" + str(capability["capabilityId"]),
@@ -348,68 +829,70 @@ class CozytouchSensor(SensorEntity, CoordinatorEntity):
             value = self.coordinator.get_capability_value(
                 self._capability["capabilityId"]
             )
+
             if value is None:
                 return None
+
             if self._value_type == CozytouchCapabilityVariableType.BOOL:
                 return bool(value)
+
             if self._value_type == CozytouchCapabilityVariableType.FLOAT:
                 return float(value)
+
             if self._value_type == CozytouchCapabilityVariableType.INT:
                 return int(value)
-        except ValueError:
+
+        except (ValueError, TypeError):
             return value
 
         return value
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        modelInfos = self.coordinator.get_model_infos()
+        """Return device information."""
+        model_infos = self.coordinator.get_model_infos()
+
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_uniq_id)},
             manufacturer="Atlantic",
-            name=modelInfos["name"],
-            model=modelInfos["name"],
+            name=model_infos["name"],
+            model=model_infos["name"],
             serial_number=self.coordinator.get_serial_number(),
         )
 
     @property
     def native_value(self):
-        """Value of the sensor."""
+        """Return sensor value."""
         return self._last_value
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Update the value of the sensor from the hub."""
-        # Get last seen value from controller
+        """Update sensor value from the hub."""
         value = self.get_value()
-        # _LOGGER.info("%s: update %s (%s)", self._config_title, self._attr_name, value)
 
-        # Handle entity availability
         if value is None:
-            if self._attr_available:
-                if not self.coordinator.online:
-                    _LOGGER.debug(
-                        "%s: marking the %s sensor as unavailable: Cozytouch connection lost",
-                        self._config_title,
-                        self._attr_name,
-                    )
-                    self._attr_available = False
+            if self._attr_available and not self.coordinator.online:
+                _LOGGER.debug(
+                    "%s: marking %s unavailable: Cozytouch connection lost",
+                    self._config_title,
+                    self._attr_name,
+                )
+                self._attr_available = False
+
         elif not self._attr_available:
             _LOGGER.info(
-                "%s: marking the %s sensor as available now !",
+                "%s: marking %s available",
                 self._config_title,
                 self._attr_name,
             )
             self._attr_available = True
 
-        # Save value
         self._last_value = value
         self.async_write_ha_state()
 
 
 class CozytouchAwayModeTimestampSensor(CozytouchSensor):
-    """Class for away mode timestamp sensor."""
+    """Sensor for away mode timestamps."""
 
     def __init__(
         self,
@@ -423,7 +906,7 @@ class CozytouchAwayModeTimestampSensor(CozytouchSensor):
         timestamp_index: int | None = None,
         attr_uniq_id: str | None = None,
     ) -> None:
-        """Initialize an away mode timestamp Sensor."""
+        """Initialize timestamp sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -434,42 +917,58 @@ class CozytouchAwayModeTimestampSensor(CozytouchSensor):
             icon=icon,
             value_type=CozytouchCapabilityVariableType.STRING,
         )
+
         self._separator = separator
         self._timestamp_index = timestamp_index
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
+    def get_value(self) -> str | None:
+        """Retrieve timestamp from hub."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
+
+        if value is None:
+            return None
+
+        try:
             value = value.translate(str.maketrans("", "", "[]"))
             timestamps = value.split(self._separator, 2)
+
             if len(timestamps) == 2:
                 if timestamps[0] != "0" and timestamps[1] != "0":
                     timestamp = int(timestamps[self._timestamp_index])
-                    timeOffset = int(
+
+                    time_offset = int(
                         self.coordinator.get_capability_value(
                             self._capability["timezoneCapabilityId"]
                         )
                     )
-                    ts = datetime.datetime.fromtimestamp(timestamp + timeOffset)
 
-                    # Check if we need to init timestamps in coordinator
-                    timestampStart = self.coordinator.get_away_mode_start()
-                    timestampEnd = self.coordinator.get_away_mode_end()
-                    if timestampStart is None or timestampEnd is None:
+                    ts = datetime.datetime.fromtimestamp(
+                        timestamp + time_offset
+                    )
+
+                    timestamp_start = self.coordinator.get_away_mode_start()
+                    timestamp_end = self.coordinator.get_away_mode_end()
+
+                    if timestamp_start is None or timestamp_end is None:
                         self.coordinator.away_mode_init(
-                            int(timestamps[0]), int(timestamps[1])
+                            int(timestamps[0]),
+                            int(timestamps[1]),
                         )
 
                     return ts.strftime("%H:%M %d/%m/%Y")
 
                 return "Undefined"
 
+        except (ValueError, TypeError, IndexError):
+            _LOGGER.warning("Invalid away mode timestamp: %s", value)
+
         return None
 
 
 class CozytouchBinarySensor(BinarySensorEntity, CozytouchSensor):
-    """Class for binary sensor."""
+    """Binary sensor for Cozytouch."""
 
     def __init__(
         self,
@@ -480,7 +979,7 @@ class CozytouchBinarySensor(BinarySensorEntity, CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a binary Sensor."""
+        """Initialize binary sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -489,20 +988,18 @@ class CozytouchBinarySensor(BinarySensorEntity, CozytouchSensor):
             name=name,
             icon=icon,
         )
-        self._last_value: False
+
+        self._last_value = False
 
     @property
     def is_on(self) -> bool:
         """Return last state value."""
-        value_on = "1"
-        if "value_on" in self._capability:
-            value_on = self._capability["value_on"]
-
+        value_on = self._capability.get("value_on", "1")
         return self._last_value == value_on
 
 
 class CozytouchAwayModeSensor(CozytouchSensor):
-    """Class for away mode sensor."""
+    """Sensor for away mode."""
 
     def __init__(
         self,
@@ -513,7 +1010,7 @@ class CozytouchAwayModeSensor(CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a binary Sensor."""
+        """Initialize away mode sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -523,23 +1020,27 @@ class CozytouchAwayModeSensor(CozytouchSensor):
             icon=icon,
         )
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
-            strValue = "Unknown"
-            if value == self._capability["value_off"]:
-                strValue = "Off"
-            elif value == self._capability["value_pending"]:
-                strValue = "Pending"
-            elif value == self._capability["value_on"]:
-                strValue = "On"
+    def get_value(self) -> str | None:
+        """Retrieve away mode value."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
 
-            return strValue
+        if value is None:
+            return None
+
+        if value == self._capability["value_off"]:
+            return "Off"
+        if value == self._capability["value_pending"]:
+            return "Pending"
+        if value == self._capability["value_on"]:
+            return "On"
+
+        return "Unknown"
 
 
 class CozytouchUnitSensor(CozytouchSensor):
-    """Class for unit sensor."""
+    """Sensor with a unit of measurement."""
 
     def __init__(
         self,
@@ -554,8 +1055,9 @@ class CozytouchUnitSensor(CozytouchSensor):
         suggested_precision: int | None = None,
         name: str | None = None,
         icon: str | None = None,
+        displayed_unit_of_measurement=None,
     ) -> None:
-        """Initialize an unit Sensor."""
+        """Initialize unit sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -565,40 +1067,42 @@ class CozytouchUnitSensor(CozytouchSensor):
             icon=icon,
             value_type=CozytouchCapabilityVariableType.FLOAT,
         )
+
         self._attr_native_unit_of_measurement = native_unit_of_measurement
         self._attr_suggested_display_precision = suggested_precision
+
         if device_class:
             self._attr_device_class = device_class
 
         if state_class:
             self._attr_state_class = state_class
 
-        self.displayed_unit_of_measurement = (
-            capability.get("displayed_unit_of_measurement", None),
-        )
-
+        self.displayed_unit_of_measurement = displayed_unit_of_measurement
         self._display_factor = display_factor
 
     def get_value(self):
-        """Retrieve value from hub and convert it if needed."""
+        """Retrieve and convert value."""
         value = super().get_value()
-        if self._display_factor != 1.0:
+
+        if value is not None and self._display_factor != 1.0:
             return float(value) * self._display_factor
 
         return value
 
     @property
     def native_value(self) -> float | None:
-        """Value of the sensor."""
-        if self._last_value:
+        """Return numeric sensor value."""
+        if self._last_value is not None:
             try:
                 return float(self._last_value)
-            except ValueError:
-                return 0.0
+            except (ValueError, TypeError):
+                return None
+
+        return None
 
 
 class CozytouchTimeSensor(CozytouchSensor):
-    """Class for time sensor (in minutes)."""
+    """Sensor for time values expressed in minutes."""
 
     def __init__(
         self,
@@ -609,7 +1113,7 @@ class CozytouchTimeSensor(CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a time Sensor."""
+        """Initialize time sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -618,37 +1122,32 @@ class CozytouchTimeSensor(CozytouchSensor):
             name=name,
             icon=icon,
         )
-        self._last_value: 0
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
-            strValue = ""
-            days = 0
-            remaining = int(value)
-            if remaining >= (60 * 24):
-                days = int(remaining / (60 * 24))
-                remaining -= days * (60 * 24)
+        self._last_value = 0
 
-            hours = 0
-            if remaining >= 60:
-                hours = int(remaining / 60)
-                remaining -= hours * 60
+    def get_value(self) -> str | None:
+        """Retrieve and format time value."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
 
-            minutes = int(remaining)
+        if value is None:
+            return None
 
-            if days > 0:
-                strValue = str(days) + "d "
+        remaining = int(value)
+        days, remaining = divmod(remaining, 60 * 24)
+        hours, minutes = divmod(remaining, 60)
 
-            strValue += "%02d:%02d" % (hours, minutes)
-            return strValue
+        result = f"{hours:02d}:{minutes:02d}"
 
-        return None
+        if days > 0:
+            result = f"{days}d {result}"
+
+        return result
 
 
 class CozytouchTimezoneSensor(CozytouchSensor):
-    """Class for timezone sensor."""
+    """Sensor for timezone offset."""
 
     def __init__(
         self,
@@ -659,7 +1158,7 @@ class CozytouchTimezoneSensor(CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a time Sensor."""
+        """Initialize timezone sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -668,26 +1167,32 @@ class CozytouchTimezoneSensor(CozytouchSensor):
             name=name,
             icon=icon,
         )
-        self._last_value: 0
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
-            if float(value) > 0:
-                strValue = "GMT+%d" % (int(value) / 3600)
-            elif float(value) < 0:
-                strValue = "GMT-%d" % (abs(int(value)) / 3600)
-            else:
-                strValue = "GMT"
+        self._last_value = 0
 
-            return strValue
+    def get_value(self) -> str | None:
+        """Retrieve timezone offset."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
 
-        return None
+        if value is None:
+            return None
+
+        offset = int(float(value))
+        hours = abs(offset) // 3600
+        minutes = (abs(offset) % 3600) // 60
+
+        if offset > 0:
+            return f"GMT+{hours:02d}:{minutes:02d}"
+        if offset < 0:
+            return f"GMT-{hours:02d}:{minutes:02d}"
+
+        return "GMT"
 
 
 class CozytouchProgSensor(CozytouchSensor):
-    """Class for Prog sensor."""
+    """Sensor for Cozytouch programming values."""
 
     def __init__(
         self,
@@ -698,7 +1203,7 @@ class CozytouchProgSensor(CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a prog Sensor."""
+        """Initialize programming sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -708,30 +1213,32 @@ class CozytouchProgSensor(CozytouchSensor):
             icon=icon,
         )
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
-            progList = json.loads(value)
+    def get_value(self) -> str | None:
+        """Retrieve programming values."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
 
-            strValue = ""
-            for prog in progList:
-                if len(prog) >= 2 and (prog[0] != 0 or prog[1] != 0):
-                    hours = int(prog[0] / 60)
-                    minutes = int(prog[0] % 60)
+        if value is None:
+            return None
 
-                    if strValue != "":
-                        strValue += " / "
-                    strValue += "%02d:%02d " % (hours, minutes)
-                    strValue += " %d°C" % (prog[1])
+        prog_list = json.loads(value)
+        result = ""
 
-            return strValue
+        for prog in prog_list:
+            if len(prog) >= 2 and (prog[0] != 0 or prog[1] != 0):
+                hours, minutes = divmod(int(prog[0]), 60)
 
-        return None
+                if result:
+                    result += " / "
+
+                result += f"{hours:02d}:{minutes:02d} {int(prog[1])}°C"
+
+        return result
 
 
 class CozytouchProgTimeSensor(CozytouchSensor):
-    """Class for ProgTime sensor."""
+    """Sensor for Cozytouch programming time ranges."""
 
     def __init__(
         self,
@@ -742,7 +1249,7 @@ class CozytouchProgTimeSensor(CozytouchSensor):
         name: str | None = None,
         icon: str | None = None,
     ) -> None:
-        """Initialize a prog time Sensor."""
+        """Initialize programming time sensor."""
         super().__init__(
             capability=capability,
             config_title=config_title,
@@ -752,30 +1259,29 @@ class CozytouchProgTimeSensor(CozytouchSensor):
             icon=icon,
         )
 
-    def get_value(self) -> str:
-        """Retrieve value from hub."""
-        value = self.coordinator.get_capability_value(self._capability["capabilityId"])
-        if value is not None:
-            progList = json.loads(value)
+    def get_value(self) -> str | None:
+        """Retrieve programming time ranges."""
+        value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"]
+        )
 
-            strValue = ""
-            for prog in progList:
-                if len(prog) >= 2 and (prog[0] != 0 or prog[1] != 0):
-                    hoursfrom = int(prog[0] / 60)
-                    minutesfrom = int(prog[0] % 60)
+        if value is None:
+            return None
 
-                    hoursto = int(prog[1] / 60)
-                    minutesto = int(prog[1] % 60)
+        prog_list = json.loads(value)
+        result = ""
 
-                    if strValue != "":
-                        strValue += " / "
-                    strValue += "%02d:%02d-%02d:%02d" % (
-                        hoursfrom,
-                        minutesfrom,
-                        hoursto,
-                        minutesto,
-                    )
+        for prog in prog_list:
+            if len(prog) >= 2 and (prog[0] != 0 or prog[1] != 0):
+                start_hour, start_minute = divmod(int(prog[0]), 60)
+                end_hour, end_minute = divmod(int(prog[1]), 60)
 
-            return strValue
+                if result:
+                    result += " / "
 
-        return None
+                result += (
+                    f"{start_hour:02d}:{start_minute:02d}-"
+                    f"{end_hour:02d}:{end_minute:02d}"
+                )
+
+        return result

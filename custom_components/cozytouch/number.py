@@ -7,7 +7,9 @@ from homeassistant.components.number import NumberDeviceClass, NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .hub import Hub
@@ -16,67 +18,266 @@ from .sensor import CozytouchSensor
 _LOGGER = logging.getLogger(__name__)
 
 
-# config flow setup
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up entry."""
-    # Retrieve the hub object
+    """Set up number entities."""
     try:
         hub = hass.data[DOMAIN][config_entry.entry_id]
     except KeyError:
         _LOGGER.error(
-            "%s: can not init binaries sensors: failed to get the hub object",
+            "%s: cannot initialize number entities: hub not found",
             config_entry.title,
         )
         return
 
-    # Init number entities
     numbers = []
-    capabilities = hub.get_capabilities_for_device()
-    for capability in capabilities:
-        if capability["type"] == "temperature_adjustment_number":
-            numbers.append(
-                TemperatureAdjustmentNumber(
-                    coordinator=hub,
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                )
-            )
-        elif capability["type"] == "temperature_percent_adjustment_number":
-            numbers.append(
-                TemperaturePercentAdjustmentNumber(
-                    coordinator=hub,
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                )
-            )
-        elif capability["type"] == "hours_adjustment_number":
-            numbers.append(
-                HoursAdjustmentNumber(
-                    coordinator=hub,
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                )
-            )
-        elif capability["type"] == "minutes_adjustment_number":
-            numbers.append(
-                MinutesAdjustmentNumber(
-                    coordinator=hub,
-                    capability=capability,
-                    config_title=config_entry.title,
-                    config_uniq_id=config_entry.entry_id,
-                )
-            )
 
-    # Add the entities to HA
-    if len(numbers) > 0:
+    if hub.is_overkiz():
+        numbers.extend(
+            [
+                OverkizPagosaTargetTemperatureNumber(
+                    coordinator=hub,
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                ),
+                OverkizPagosaBoostDurationNumber(
+                    coordinator=hub,
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                ),
+                OverkizPagosaAwayDurationNumber(
+                    coordinator=hub,
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                ),
+            ]
+        )
+    else:
+        capabilities = hub.get_capabilities_for_device()
+
+        for capability in capabilities:
+            if capability["type"] == "temperature_adjustment_number":
+                numbers.append(
+                    TemperatureAdjustmentNumber(
+                        coordinator=hub,
+                        capability=capability,
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                    )
+                )
+            elif capability["type"] == "temperature_percent_adjustment_number":
+                numbers.append(
+                    TemperaturePercentAdjustmentNumber(
+                        coordinator=hub,
+                        capability=capability,
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                    )
+                )
+            elif capability["type"] == "hours_adjustment_number":
+                numbers.append(
+                    HoursAdjustmentNumber(
+                        coordinator=hub,
+                        capability=capability,
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                    )
+                )
+            elif capability["type"] == "minutes_adjustment_number":
+                numbers.append(
+                    MinutesAdjustmentNumber(
+                        coordinator=hub,
+                        capability=capability,
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                    )
+                )
+
+    if numbers:
         async_add_entities(numbers, True)
+
+
+class OverkizPagosaNumberBase(CoordinatorEntity[Hub], NumberEntity):
+    """Base class for Pagosa number entities."""
+
+    _attr_has_entity_name = True
+    _attr_mode = "slider"
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+        unique_suffix: str,
+    ) -> None:
+        """Initialize a Pagosa number entity."""
+        super().__init__(coordinator)
+
+        self._attr_unique_id = (
+            f"{DOMAIN}_{config_uniq_id}_pagosa_{unique_suffix}"
+        )
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator._deviceId))},
+            manufacturer="Sauter",
+            model="Pagosa 270L",
+            name=config_title,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return entity availability."""
+        return (
+            self.coordinator.online
+            and self.coordinator.last_update_success
+        )
+
+
+class OverkizPagosaTargetTemperatureNumber(OverkizPagosaNumberBase):
+    """Pagosa target temperature controlled through Overkiz."""
+
+    _attr_name = "Température de consigne"
+    _attr_icon = "mdi:thermometer-water"
+    _attr_device_class = NumberDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_native_min_value = 40
+    _attr_native_max_value = 65
+    _attr_native_step = 1
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+    ) -> None:
+        """Initialize the Pagosa target temperature entity."""
+        super().__init__(
+            coordinator,
+            config_title,
+            config_uniq_id,
+            "target_temperature",
+        )
+        self._attr_native_value = self._read_value()
+
+    def _read_value(self) -> float:
+        """Read the target temperature from Overkiz."""
+        value = self.coordinator.get_overkiz_state(
+            "core:TargetTemperatureState",
+            50,
+        )
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 50.0
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update the displayed target temperature."""
+        self._attr_native_value = self._read_value()
+        self.async_write_ha_state()
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Send a new target temperature to the Pagosa."""
+        new_value = max(40, min(65, value))
+        await self.coordinator.set_overkiz_target_temperature(new_value)
+
+
+class OverkizPagosaBoostDurationNumber(OverkizPagosaNumberBase):
+    """Pagosa Boost duration."""
+
+    _attr_name = "Durée Boost"
+    _attr_icon = "mdi:rocket-launch"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 7
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "d"
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+    ) -> None:
+        """Initialize Boost duration."""
+        super().__init__(
+            coordinator,
+            config_title,
+            config_uniq_id,
+            "boost_duration",
+        )
+        self._attr_native_value = self._read_value()
+
+    def _read_value(self) -> float:
+        """Read Boost duration."""
+        value = self.coordinator.get_overkiz_state(
+            "core:BoostModeDurationState",
+            0,
+        )
+        try:
+            return max(0, min(7, float(value)))
+        except (TypeError, ValueError):
+            return 0
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update Boost duration."""
+        self._attr_native_value = self._read_value()
+        self.async_write_ha_state()
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set Boost duration."""
+        new_value = int(max(0, min(7, value)))
+        await self.coordinator.set_overkiz_boost_duration(new_value)
+
+
+class OverkizPagosaAwayDurationNumber(OverkizPagosaNumberBase):
+    """Pagosa absence duration."""
+
+    _attr_name = "Durée Absence"
+    _attr_icon = "mdi:home-export-outline"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 6
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "d"
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+    ) -> None:
+        """Initialize absence duration."""
+        super().__init__(
+            coordinator,
+            config_title,
+            config_uniq_id,
+            "away_duration",
+        )
+        self._attr_native_value = self._read_value()
+
+    def _read_value(self) -> float:
+        """Read absence duration."""
+        value = self.coordinator.get_overkiz_state(
+            "io:AwayModeDurationState",
+            0,
+        )
+        try:
+            return max(0, min(6, float(value)))
+        except (TypeError, ValueError):
+            return 0
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update absence duration."""
+        self._attr_native_value = self._read_value()
+        self.async_write_ha_state()
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set absence duration."""
+        new_value = int(max(0, min(6, value)))
+        await self.coordinator.set_overkiz_away_duration(new_value)
 
 
 class TemperatureAdjustmentNumber(NumberEntity, CozytouchSensor):
@@ -118,7 +319,6 @@ class TemperatureAdjustmentNumber(NumberEntity, CozytouchSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the value of the sensor from the hub."""
-        # Get last seen value from controller
         value = float(
             self.coordinator.get_capability_value(self._capability["capabilityId"])
         )
@@ -142,7 +342,6 @@ class TemperatureAdjustmentNumber(NumberEntity, CozytouchSensor):
         elif value > self._attr_native_max_value:
             value = self._attr_native_max_value
 
-        # Save value
         self._native_value = value
         self.async_write_ha_state()
 
@@ -207,7 +406,6 @@ class TemperaturePercentAdjustmentNumber(NumberEntity, CozytouchSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the value of the sensor from the hub."""
-        # Get last seen value from controller
         valuePercent = float(
             self.coordinator.get_capability_value(self._capability["capabilityId"])
         )
@@ -219,7 +417,6 @@ class TemperaturePercentAdjustmentNumber(NumberEntity, CozytouchSensor):
         elif value > self._attr_native_max_value:
             value = self._attr_native_max_value
 
-        # Save value
         self._native_value = value
         self.async_write_ha_state()
 
@@ -278,7 +475,6 @@ class HoursAdjustmentNumber(NumberEntity, CozytouchSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the value of the sensor from the hub."""
-        # Get last seen value from controller
         value = (
             float(
                 self.coordinator.get_capability_value(self._capability["capabilityId"])
@@ -307,6 +503,7 @@ class HoursAdjustmentNumber(NumberEntity, CozytouchSensor):
         )
 
         await self.coordinator.async_request_refresh()
+
 
 class MinutesAdjustmentNumber(NumberEntity, CozytouchSensor):
     """Minutes adjustment number class."""
@@ -347,11 +544,8 @@ class MinutesAdjustmentNumber(NumberEntity, CozytouchSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the value of the sensor from the hub."""
-        # Get last seen value from controller
-        value = (
-            float(
-                self.coordinator.get_capability_value(self._capability["capabilityId"])
-            )
+        value = float(
+            self.coordinator.get_capability_value(self._capability["capabilityId"])
         )
 
         if value < self._attr_native_min_value:
