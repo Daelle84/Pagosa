@@ -49,6 +49,14 @@ async def async_setup_entry(
                     config_uniq_id=config_entry.entry_id,
                 )
             )
+        if device and hasattr(hub, "pagosa_absence_window"):
+            datetimes.append(
+                PagosaAbsenceEndDateTime(
+                    coordinator=hub,
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                )
+            )
     else:
         capabilities = hub.get_capabilities_for_device()
 
@@ -308,3 +316,50 @@ class CozytouchAwayModeDateTime(DateTimeEntity, CozytouchSensor):
             )
 
         return None
+
+
+class PagosaAbsenceEndDateTime(CoordinatorEntity[Hub], DateTimeEntity):
+    """End of the Pagosa Absence period (moved without stopping it)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Fin de l'absence"
+    _attr_icon = "mdi:calendar-end"
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(coordinator)
+        self._hub = coordinator
+        self._attr_unique_id = f"{config_uniq_id}_pagosa_absence_end"
+        device = coordinator.get_overkiz_device() or {}
+        self._attr_device_info = DeviceInfo(
+            identifiers={
+                (DOMAIN, str(device.get("deviceURL", config_uniq_id)))
+            },
+            name=device.get("label") or config_title or "Sauter Pagosa 270L",
+            manufacturer="Sauter",
+            model="Pagosa 270L",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return entity availability."""
+        return self._hub.online and self._hub.last_update_success
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the end of the Absence, if one is set."""
+        window = self._hub.pagosa_absence_window()
+        if window is None:
+            return None
+        end = datetime.fromtimestamp(window[1], tz=dt_util.DEFAULT_TIME_ZONE)
+        return end if end > dt_util.now() else None
+
+    async def async_set_value(self, value: datetime) -> None:
+        """Move the end of the Absence (in the past = stop it now)."""
+        await self._hub.pagosa_set_absence_end(int(value.timestamp()))
+        self.async_write_ha_state()

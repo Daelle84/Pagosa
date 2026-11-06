@@ -24,7 +24,9 @@ fonctionnaient pas au départ :
 - **Température de consigne** en mode manuel (limites lues sur l'appareil) ;
 - **Mode Eco** (en mode manuel, comme dans l'application) ;
 - **Boost** de 1 à 7 jours ;
-- **Absence** de 48 h minimum, avec durée réglable et un **calendrier** pour la planifier ;
+- **Absence** de 48 h minimum, avec durée réglable, un **calendrier** pour la planifier
+  et une **date de fin** modifiable sans arrêter l'absence (pratique pour un retour
+  avancé ou repoussé) ;
 - **Programmation hebdomadaire** (plages de chauffe) ;
 - **Date et heure** de l'appareil ;
 - **Capteurs** : températures de l'eau, quantité d'eau chaude disponible, temps de
@@ -73,7 +75,7 @@ Tested on one Sauter Pagosa 270 L. Discussion upstream: gduteil/cozytouch issues
 | Target temperature (manual mode, limits read from the device) | number *Température de consigne* |
 | Eco (manual mode only) | switch *Mode Eco* |
 | Boost, 1 to 7 days | switch *Boost ECS*, number *Durée Boost* |
-| Absence, 2 days minimum, as the Atlantic app does it (setup period **and** Overkiz commands) | switch *Mode absence*, number *Durée Absence*, calendar *Absence (48 h minimum)* |
+| Absence, 2 days minimum, as the Atlantic app does it (setup period **and** Overkiz commands) | switch *Mode absence*, number *Durée Absence*, calendar *Absence (48 h minimum)*, datetime *Fin de l'absence* |
 | Weekly programming | time *Programmation n - début / fin* |
 | Device clock | datetime *Date et heure de l'appareil* |
 | Temperatures, water use, heat pump and electric back-up run time, energy, settings, radio signal, errors | sensors |
@@ -88,6 +90,13 @@ How it behaves:
   session is renewed once on HTTP 401, never retried in a loop.
 - Eco and the target temperature are refused in automatic mode, as in the app;
   Boost works in both. An absence overrides everything.
+- The Pagosa refuses the direct absence command (`setCurrentOperatingMode`
+  ends in `ERRORCOMMAND` in the Overkiz history, from the official app too).
+  The Atlantic cloud starts and ends the absence itself from the period stored
+  in the setup, about an hour later, and then reports the duration as
+  `always`. So the absence switch shows only the real state (no requested
+  state in the meantime), *Durée Absence* shows the days left, and *Fin de
+  l'absence* moves the end of the period (an end in the past stops it).
 
 Entity names are in French for now.
 

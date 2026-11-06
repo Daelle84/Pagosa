@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import time
 
 from homeassistant import exceptions
@@ -174,14 +175,11 @@ async def async_set_pagosa_away(
             "refreshAwayModeDuration", refresh=False
         )
 
-    await self.async_run_pagosa_operation(
-        operation,
-        {
-            "core:OperatingModeState": current,
-            "io:AwayModeDurationState": str(days),
-        },
-        "Pagosa Absence",
-    )
+    # No optimistic state: the Pagosa rejects setCurrentOperatingMode for the
+    # Absence (ERRORCOMMAND, also from the official app). The Atlantic cloud
+    # applies the period written in the setup by itself (about 1 h later), so
+    # the switch must show the real state only.
+    await self.async_run_pagosa_operation(operation, None, "Pagosa Absence")
 
 
 async def set_overkiz_away_duration(self: Hub, value: int) -> None:
@@ -257,7 +255,37 @@ def pagosa_absence_window(self: Hub) -> tuple[int, int] | None:
     return (start, end) if start > 0 and end > start else None
 
 
+async def pagosa_set_absence_end(self: Hub, end: int) -> None:
+    """Move the end of the Absence period (the Atlantic cloud applies it).
+
+    An end in the past (or within 2 minutes) stops the Absence now.
+    """
+    await pagosa_refresh_absence(self, force=True)
+    window = pagosa_absence_window(self)
+    if window is None:
+        raise exceptions.HomeAssistantError("No Absence is set.")
+    start, end, now = window[0], int(end), int(time.time())
+    if end <= now + 120:
+        await async_set_pagosa_away(self, False)
+        return
+    if end - start < PAGOSA_ABSENCE_MIN_DAYS * 86400 - 60:
+        raise exceptions.HomeAssistantError(
+            "An Absence lasts at least 48 hours (2 days) minimum."
+        )
+    if end - start > PAGOSA_ABSENCE_MAX_DAYS * 86400:
+        raise exceptions.HomeAssistantError(
+            f"An Absence lasts at most {PAGOSA_ABSENCE_MAX_DAYS} days."
+        )
+
+    async def operation():
+        await _put_atlantic_absence(self, start, end)
+
+    await self.async_run_pagosa_operation(operation, None, "Pagosa Absence end")
+    self.async_set_updated_data(self.data)
+
+
 Hub._put_atlantic_absence = _put_atlantic_absence
+Hub.pagosa_set_absence_end = pagosa_set_absence_end
 Hub.async_set_pagosa_away = async_set_pagosa_away
 Hub.set_overkiz_away_duration = set_overkiz_away_duration
 Hub.pagosa_refresh_absence = pagosa_refresh_absence
@@ -279,7 +307,14 @@ def _patch_number() -> None:
         try:
             return max(0, min(PAGOSA_ABSENCE_MAX_DAYS, float(value)))
         except (TypeError, ValueError):
-            return 0
+            pass
+        # "always": Absence applied by the Atlantic cloud from the setup
+        # period; show the days left until its end.
+        window = self.coordinator.pagosa_absence_window()
+        if window is not None and _is_absent(self.coordinator):
+            left = (window[1] - time.time()) / 86400
+            return max(0, min(PAGOSA_ABSENCE_MAX_DAYS, math.ceil(left)))
+        return 0
 
     async def async_set_native_value(self, value: float) -> None:
         new_value = int(max(0, min(PAGOSA_ABSENCE_MAX_DAYS, value)))
