@@ -149,3 +149,27 @@ def test_an_overkiz_device_url_is_told_from_a_cozytouch_device_id():
     assert is_overkiz_device_id("io://0000-1111-2222/1234567#1")
     assert not is_overkiz_device_id(12345)
     assert not is_overkiz_device_id("12345")
+
+
+def test_an_entry_keeps_its_own_pagosa_when_the_account_holds_two():
+    """A second Pagosa on the account must not take this entry's place."""
+    capture = json.loads(CAPTURE.read_text())
+    setup = copy.deepcopy(capture["overkiz_setup"])
+    devices = PagosaHub._extract_overkiz_devices(setup)
+    for device in list(devices):
+        url = device.get("deviceURL", "")
+        if url.startswith("io://0000-1111-2222/1234567#"):
+            twin = copy.deepcopy(device)
+            twin["deviceURL"] = url.replace("1234567", "9999999")
+            devices.append(twin)
+    if isinstance(setup, dict):
+        setup["devices"] = devices
+    else:
+        setup[0]["devices"] = devices
+
+    for wanted in ("io://0000-1111-2222/1234567", "io://0000-1111-2222/9999999"):
+        the_hub = hub()
+        the_hub._deviceId = wanted + "#1"
+        the_hub._apply_overkiz_setup(setup)
+        assert the_hub._overkiz_device["deviceURL"] == wanted + "#1"
+        assert the_hub._overkiz_energy_device["deviceURL"] == wanted + "#2"

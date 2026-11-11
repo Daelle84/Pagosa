@@ -397,52 +397,42 @@ class PagosaHub(DataUpdateCoordinator):
         return []
 
     def _select_overkiz_devices(self) -> None:
-        """Select Pagosa heater and its energy sensor."""
-        self._overkiz_device = None
+        """Select this entry's Pagosa heater and its energy sensor.
+
+        An account can hold more than one Pagosa : the heater is the one whose
+        deviceURL this entry recorded, and only an entry that has none yet
+        (or whose heater left the account) takes the first Pagosa found. The
+        energy sensor is the one on the same base URL as the heater.
+        """
+        devices = [d for d in self._overkiz_devices if isinstance(d, dict)]
+        heaters = [
+            d
+            for d in devices
+            if d.get("controllableName") == PAGOSA_CONTROLLABLE_NAME
+        ]
+        energy_devices = [
+            d
+            for d in devices
+            if d.get("controllableName") == PAGOSA_ENERGY_CONTROLLABLE_NAME
+        ]
+
+        self._overkiz_device = next(
+            (d for d in heaters if d.get("deviceURL") == self._deviceId),
+            heaters[0] if heaters else None,
+        )
         self._overkiz_energy_device = None
-
-        for device in self._overkiz_devices:
-            if not isinstance(device, dict):
-                continue
-
-            if device.get("deviceURL") == self._deviceId:
-                self._overkiz_device = device
-
-            if device.get("controllableName") == PAGOSA_CONTROLLABLE_NAME:
-                self._overkiz_device = device
-
-            if (
-                device.get("controllableName")
-                == PAGOSA_ENERGY_CONTROLLABLE_NAME
-            ):
-                self._overkiz_energy_device = device
-
         if self._overkiz_device is None:
-            self._overkiz_device = next(
-                (
-                    device
-                    for device in self._overkiz_devices
-                    if isinstance(device, dict)
-                    and device.get("controllableName")
-                    == PAGOSA_CONTROLLABLE_NAME
-                ),
-                None,
-            )
+            return
 
-        if self._overkiz_energy_device is None and self._overkiz_device:
-            heater_url = self._overkiz_device.get("deviceURL", "")
-            base_url = heater_url.split("#", 1)[0]
-            self._overkiz_energy_device = next(
-                (
-                    device
-                    for device in self._overkiz_devices
-                    if isinstance(device, dict)
-                    and device.get("deviceURL", "").startswith(base_url + "#")
-                    and device.get("controllableName")
-                    == PAGOSA_ENERGY_CONTROLLABLE_NAME
-                ),
-                None,
-            )
+        base_url = self._overkiz_device.get("deviceURL", "").split("#", 1)[0]
+        self._overkiz_energy_device = next(
+            (
+                d
+                for d in energy_devices
+                if d.get("deviceURL", "").startswith(base_url + "#")
+            ),
+            energy_devices[0] if len(energy_devices) == 1 else None,
+        )
 
     def _read_overkiz_states_from_setup(self) -> None:
         """Read heater and energy states from setup response."""
