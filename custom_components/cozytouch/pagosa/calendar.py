@@ -148,7 +148,7 @@ class PagosaAbsenceCalendar(CoordinatorEntity[Hub], CalendarEntity):
                     "An Absence is already set. Delete it first."
                 )
 
-        from .pagosa_absence import PAGOSA_ABSENCE_MAX_DAYS
+        from .absence import PAGOSA_ABSENCE_MAX_DAYS
 
         start, end, immediate = absence_window_from_event(
             kwargs["dtstart"],
