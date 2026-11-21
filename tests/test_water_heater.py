@@ -20,6 +20,8 @@ from custom_components.cozytouch.water_heater import (
     CozytouchWaterHeater,
     water_heater_for,
 )
+from homeassistant.components.water_heater import WaterHeaterEntity
+from homeassistant.const import UnitOfTemperature
 
 LINEO = 1959
 
@@ -118,11 +120,49 @@ def test_a_tank_without_a_setpoint_gets_none():
     assert build(hub) == []
 
 
+def native_release():
+    return hasattr(WaterHeaterEntity, "native_current_temperature")
+
+
+def temperatures(entity):
+    """The readings under the names the installed release reads."""
+    prefix = "native_" if native_release() else ""
+    return (
+        getattr(entity, f"{prefix}target_temperature"),
+        getattr(entity, f"{prefix}current_temperature"),
+        getattr(entity, f"{prefix}temperature_unit"),
+    )
+
+
+def test_the_entity_declares_the_unit_the_installed_release_reads():
+    """2026.11 reads `_attr_native_temperature_unit` ; 2025.12 has no such name."""
+    declared = vars(CozytouchWaterHeater).keys()
+    wanted, unwanted = (
+        ("_attr_native_temperature_unit", "_attr_temperature_unit")
+        if native_release()
+        else ("_attr_temperature_unit", "_attr_native_temperature_unit")
+    )
+
+    assert wanted in declared
+    assert unwanted not in declared
+
+
+def test_the_readings_are_stored_under_the_native_names_where_they_exist():
+    """The cached `_attr_` values land in the instance as `__attr_...`."""
+    entity = updated(coordinator())
+    stored = {key.lstrip("_") for key in vars(entity)}
+    old = {"attr_current_temperature", "attr_target_temperature"}
+    new = {"attr_native_current_temperature", "attr_native_target_temperature"}
+    wanted, unwanted = (new, old) if native_release() else (old, new)
+
+    assert wanted <= stored
+    assert not unwanted & stored
+
+
 def test_it_reads_the_tank_as_the_app_shows_it():
     entity = updated(coordinator())
 
-    assert entity.target_temperature == 55.0
-    assert entity.current_temperature == 56.35
+    assert temperatures(entity) == (55.0, 56.35, UnitOfTemperature.CELSIUS)
     assert entity.current_operation == "manual"
     assert entity.operation_list == ["manual", "eco_plus"]
     assert (entity.min_temp, entity.max_temp) == (50.0, 70.0)

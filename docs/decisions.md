@@ -5050,6 +5050,25 @@ three things : the setpoint (55 °C on 231), the share of hot water left
   PUT and its dates (see *The setup PUT is what sets an absence*), and an
   `away_mode` on the entity would be a second way into that path for no gain.
 
+### The tank's temperatures go under the names the running release reads
+
+Home Assistant 2026.11 moved the water heater's temperatures to `native_*`
+names, as it did the climate's : `_attr_native_current_temperature`,
+`_attr_native_target_temperature`, `_attr_native_temperature_unit`. The old
+ones still work through a shim that stops in 2027.11, and a live 2026.11.2
+install logs it for `_attr_temperature_unit` when the module is imported,
+whether or not the account has a tank (2026-11-21, one Pagosa account).
+
+The same answer as *The temperatures go under the names the running release
+reads* : `_NATIVE_TEMPERATURES` reads `WaterHeaterEntity` for the native
+property, the unit is declared in the class body under one name or the
+other, and `_set_temperatures` stores both readings under the same set. The
+floor `hacs.json` declares (2025.12.0) has no native name on
+`WaterHeaterEntity`, so a straight rename would leave it reading no
+temperature. The branch goes when the floor reaches 2026.11.
+`tests/test_water_heater.py` pins both sides on whichever release the job
+installed.
+
 ## The hot-water modes come from 105011 (issue #206)
 
 The mode select offered the per-model `HeatingModes` table : manual,

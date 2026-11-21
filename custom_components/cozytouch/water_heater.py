@@ -18,6 +18,9 @@ from .sensor import CozytouchSensor
 DEFAULT_MIN_TEMPERATURE = 50.0
 DEFAULT_MAX_TEMPERATURE = 65.0
 
+# see docs/decisions.md
+_NATIVE_TEMPERATURES = hasattr(WaterHeaterEntity, "native_current_temperature")
+
 
 def water_heater_for(coordinator: Hub, capability, **kwargs):
     """One entity per tank, built beside its mode select.
@@ -60,7 +63,10 @@ def _as_float(value) -> float | None:
 class CozytouchWaterHeater(WaterHeaterEntity, CozytouchSensor):
     """The tank : its setpoint, its mode, and the water in it."""
 
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    if _NATIVE_TEMPERATURES:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = (
         WaterHeaterEntityFeature.TARGET_TEMPERATURE
         | WaterHeaterEntityFeature.OPERATION_MODE
@@ -98,11 +104,19 @@ class CozytouchWaterHeater(WaterHeaterEntity, CozytouchSensor):
         self._modes: dict[int, str] = modes
         self._attr_operation_list = list(modes.values())
         self._attr_current_operation = None
-        self._attr_current_temperature = None
-        self._attr_target_temperature = None
+        self._set_temperatures(current=None, target=None)
         self._attr_target_temperature_step = capability.get("step", 1)
         self._attr_min_temp = DEFAULT_MIN_TEMPERATURE
         self._attr_max_temp = DEFAULT_MAX_TEMPERATURE
+
+    def _set_temperatures(self, current: float | None, target: float | None) -> None:
+        """Store the readings under the names the running release reads."""
+        if _NATIVE_TEMPERATURES:
+            self._attr_native_current_temperature = current
+            self._attr_native_target_temperature = target
+        else:
+            self._attr_current_temperature = current
+            self._attr_target_temperature = target
 
     def _read(self, key: str) -> float | None:
         """The reading of the id the row wires under `key`, if any."""
@@ -120,8 +134,10 @@ class CozytouchWaterHeater(WaterHeaterEntity, CozytouchSensor):
             self._attr_min_temp = lowest
             self._attr_max_temp = highest
 
-        self._attr_target_temperature = self._read("setpointCapabilityId")
-        self._attr_current_temperature = self._read("currentValueCapabilityId")
+        self._set_temperatures(
+            current=self._read("currentValueCapabilityId"),
+            target=self._read("setpointCapabilityId"),
+        )
 
         mode = _as_float(
             self.coordinator.get_capability_value(self._capability.capabilityId, None)
